@@ -39,11 +39,10 @@ def test_info():
         'auth_provider_x509_cert_url',
         'client_x509_cert_url',
     ]
-    missing_info_keys = [key for key in need_info_keys if key not in info]
-    if missing_info_keys:
-        raise AssertionError(
-            'В объекте `google_client.INFO` не обнаружены следующие ключи: '
-            f'{", ".join(missing_info_keys)}'
+
+    for info_key in need_info_keys:
+        assert info_key in info, (
+            f'В объекте `google_client.INFO` не обнаружено ключа `{info_key}`'
         )
 
 

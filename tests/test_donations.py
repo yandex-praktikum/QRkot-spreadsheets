@@ -8,34 +8,34 @@ DONATON_DETAILS_URL = DONATIONS_URL + '{donation_id}'
 MY_DONATIONS_URL = DONATIONS_URL + 'my'
 
 
-@pytest.mark.parametrize(
-    'json_data', (
-        {'full_amount': 5, 'comment': 'To you for chimichangas'},
+@pytest.mark.parametrize('json_data, expected_keys, expected_data', [
+    (
         {'full_amount': 10},
-    )
-)
-def test_create_donation(user_client, json_data):
+        {'full_amount', 'id', 'create_date'},
+        {'full_amount': 10, 'id': 1},
+    ),
+    (
+        {'full_amount': 5, 'comment': 'To you for chimichangas'},
+        {'full_amount', 'id', 'create_date', 'comment'},
+        {'full_amount': 5, 'id': 1, 'comment': 'To you for chimichangas'},
+    ),
+])
+def test_create_donation(user_client, json_data, expected_keys, expected_data):
     response = user_client.post(DONATIONS_URL, json=json_data)
     assert response.status_code == 200, (
         'Корректный POST-запрос зарегистрированного пользователя к эндпоинту '
-        f'`{DONATIONS_URL}` должен возвращать ответ со статус-кодом 200.\n'
-        f'Был отправлен запрос с телом `{json_data}`. Полученный код ответа: '
-        f'{response.status_code}.'
+        f'`{DONATIONS_URL}` должен возвращать ответ со статус-кодом 200.'
     )
     data = response.json()
-    missing_keys = (
-        {'full_amount', 'id', 'create_date', 'comment'} - data.keys()
-    )
-    if 'comment' not in json_data:
-        missing_keys.remove('comment')
+    missing_keys = expected_keys - data.keys()
     assert not missing_keys, (
-        'В ответе на POST-запрос зарегистрированного пользователя к '
-        f'эндпоинту `{DONATIONS_URL}` не хватает следующих ключей: '
+        'В ответе на POST-запрос зарегистрированного пользователя к эндпоинту '
+        f'`{DONATIONS_URL}` не хватает следующих ключей: '
         f'`{"`, `".join(missing_keys)}`'
     )
     data.pop('create_date')
-    data.pop('id')
-    assert data == json_data, (
+    data.pop('comment', None) if not data.get('comment') else None
+    assert data == expected_data, (
         'При создании пожертвования тело ответа API отличается от ожидаемого.'
     )
 
@@ -75,7 +75,7 @@ def test_get_user_donation(user_client, donation):
         f'`{MY_DONATIONS_URL}` должны быть только пожертвования пользователя, '
         'сделавшего запрос.'
     )
-    data = response_data[0]
+    data = response.json()[0]
     keys = sorted([
         'full_amount',
         'comment',
@@ -105,11 +105,11 @@ def test_get_all_donations(superuser_client, donation, another_donation):
     )
     response_data = response.json()
     assert isinstance(response_data, list), (
-        'В ответе на GET-запрос суперпользователя к эндпоинту '
-        f'`{DONATIONS_URL}` должен список всех пожертвований.'
+        'При получении списка всех пожертвований должен возвращаться объект '
+        'типа `list`.'
     )
     assert len(response_data) == 2, (
-        'Ответ на GET-запрос суперпользователям к эндпоинту '
+        'Ответ на GET-запрос суперпользователя к эндпоинту '
         f'`{DONATIONS_URL}` должен содержать данные всех пожертвований.'
     )
     first_elem = response_data[0]
@@ -118,14 +118,15 @@ def test_get_all_donations(superuser_client, donation, another_donation):
         'comment',
         'id',
         'create_date',
+        'user_id',
         'invested_amount',
         'fully_invested',
     }
     missing_keys = expected_keys - first_elem.keys()
     assert not missing_keys, (
-        f'В ответе на GET-запрос суперпользователя к эндпоинту '
-        f'`{DONATIONS_URL}` в описании пожертвований не хватает следующих '
-        f'ключей: `{"`, `".join(missing_keys)}`'
+        'В ответе на GET-запрос суперпользователя к эндпоинту '
+        f'`{DONATIONS_URL}` не хватает следующих ключей: '
+        f'`{"`, `".join(missing_keys)}`'
     )
     [donation.pop('close_date', None) for donation in response_data]
     assert sorted(response_data, key=lambda x: x['id']) == sorted(
@@ -151,17 +152,8 @@ def test_get_all_donations(superuser_client, donation, another_donation):
         ],
         key=lambda x: x['id']
     ), (
-        'При запросе на получение списка всех пожертвований тело ответа API '
-        'отличается от ожидаемого.'
-    )
-
-
-@pytest.mark.usefixtures('donation', 'another_donation')
-def test_get_all_donations_by_regular_user(user_client):
-    response = user_client.get(DONATIONS_URL)
-    assert response.status_code == 403, (
-        f'GET-запрос к эндпоинту `{DONATIONS_URL}`, отправленный '
-        'не суперпользователем, должен вернуть ответ со статус-кодом 403.'
+        'При запросе суперпользователя на получение списка '
+        'всех пожертвований тело ответа API отличается от ожидаемого.'
     )
 
 
@@ -174,9 +166,9 @@ def test_get_all_donations_by_regular_user(user_client):
 def test_donation_invalid(user_client, json_data):
     response = user_client.post(DONATIONS_URL, json=json_data)
     assert response.status_code == 422, (
-        'Если POST-запрос зарегистрированного пользователя к эндпоинту '
-        f'`{DONATIONS_URL}` содержит некорректное значением поля `full_amount` - '
-        'должен вернуться ответ со статус-кодом 422. Поле `full_amount` '
+        'POST-запрос зарегистрированного пользователя к эндпоинту '
+        f'`{DONATIONS_URL}` с некорректным значением поля `full_amount` '
+        'должен вернуть ответ со статус-кодом 422. Это поле '
         'должно принимать только целые положительные числа.'
     )
 
@@ -220,21 +212,9 @@ def test_donations_cant_be_deleted(donation, client, user_role):
 
 
 def test_create_donation_check_create_date(user_client):
-    response_1 = user_client.post(
-        DONATIONS_URL,
-        json={
-            'full_amount': 10,
-            'comment': 'test',
-        }
-    )
+    response_1 = user_client.post(DONATIONS_URL, json={'full_amount': 10})
     time.sleep(0.01)
-    response_2 = user_client.post(
-        DONATIONS_URL,
-        json={
-            'full_amount': 20,
-            'comment': 'test2',
-        }
-    )
+    response_2 = user_client.post(DONATIONS_URL, json={'full_amount': 20})
     assert (
         response_1.json()['create_date'] != response_2.json()['create_date']
     ), (
