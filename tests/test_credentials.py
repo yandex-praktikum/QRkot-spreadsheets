@@ -22,7 +22,9 @@ def test_google_cred():
         'client_x509_cert_url',
         'email',
     ]
-    for cred in need_cred:
-        assert hasattr(settings, cred), (
-            f'В объекте `app.core.config.Settings` нет атрибута `{cred}`'
+    missing_cred = [cred for cred in need_cred if not hasattr(settings, cred)]
+    if missing_cred:
+        raise AssertionError(
+            'В настройках проекта (`app.core.config.Settings`) не обнаружены '
+            f'следующие атрибуты: {", ".join(missing_cred)}'
         )

@@ -1,11 +1,12 @@
+import inspect
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from mixer.backend.sqlalchemy import Mixer as _mixer
-from sqlalchemy import create_engine
+from mixer.backend.sqlalchemy import Mixer
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 try:
     from app.main import app  # noqa
@@ -50,20 +51,51 @@ pytest_plugins = [
     'fixtures.data',
 ]
 
-TEST_DB = BASE_DIR / 'test.db'
-SQLALCHEMY_DATABASE_URL = f'sqlite+aiosqlite:///{str(TEST_DB)}'
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite://"
+
+# Create async engine
 engine = create_async_engine(
     SQLALCHEMY_DATABASE_URL,
-    connect_args={'check_same_thread': False},
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
-TestingSessionLocal = sessionmaker(
-    class_=AsyncSession, autocommit=False, autoflush=False, bind=engine,
+AsyncTestingSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
 )
 
 
 async def override_db():
-    async with TestingSessionLocal() as session:
+    async with AsyncTestingSessionLocal() as session:
         yield session
+
+
+app.dependency_overrides[get_async_session] = override_db
+
+
+@pytest_asyncio.fixture
+async def session():
+    async with AsyncTestingSessionLocal() as session:
+        yield session
+
+
+@pytest.fixture
+def charity_project_model():
+    models = Base.registry._class_registry.values()
+    charity_project_model = [
+        model for model in models if (
+            inspect.isclass(model) and
+            issubclass(model, Base) and
+            model.__name__ == 'CharityProject'
+        )
+    ]
+    assert charity_project_model, (
+        'Убедитесь, что в проекте создана модель `CharityProject`.'
+    )
+    return charity_project_model[0]
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -75,8 +107,8 @@ async def init_db():
         await conn.run_sync(Base.metadata.drop_all)
 
 
-@pytest.fixture
-def mixer():
-    mixer_engine = create_engine(f'sqlite:///{str(TEST_DB)}')
-    session = sessionmaker(bind=mixer_engine)
-    return _mixer(session=session(), commit=True)
+@pytest_asyncio.fixture
+async def mixer():
+    async with AsyncTestingSessionLocal() as session:
+        mixer = Mixer(session=session)
+        yield mixer
