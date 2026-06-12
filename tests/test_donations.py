@@ -182,18 +182,26 @@ def test_donation_invalid(user_client, json_data):
 
 
 @pytest.mark.parametrize(
-    'client, user_role',
+    'client_fixture, user_role',
     [
-        (pytest.lazy_fixture('superuser_client'), 'суперпользователя'),
-        (pytest.lazy_fixture('user_client'), 'пользователя'),
-        (pytest.lazy_fixture('test_client'), 'анонимного пользователя'),
+        ('superuser_client', 'суперпользователя'),
+        ('user_client', 'пользователя'),
+        ('test_client', 'анонимного пользователя'),
     ],
     ids=['superuser', 'user', 'anonymous'],
 )
-def test_donations_cant_be_updated(donation, client, user_role):
+def test_donations_cant_be_updated(
+    donation,
+    client_fixture,
+    user_role,
+    request
+):
+    client = request.getfixturevalue(client_fixture)
+
     response = client.patch(
         DONATON_DETAILS_URL.format(donation_id=donation.id)
     )
+
     assert response.status_code == 404, (
         f'PATCH-запрос {user_role} к эндпоинту `{DONATON_DETAILS_URL}` '
         'должен вернуть ответ со статус-кодом 404.'
@@ -201,18 +209,26 @@ def test_donations_cant_be_updated(donation, client, user_role):
 
 
 @pytest.mark.parametrize(
-    'client, user_role',
+    'client_fixture, user_role',
     [
-        (pytest.lazy_fixture('superuser_client'), 'суперпользователя'),
-        (pytest.lazy_fixture('user_client'), 'пользователя'),
-        (pytest.lazy_fixture('test_client'), 'анонимного пользователя'),
+        ('superuser_client', 'суперпользователя'),
+        ('user_client', 'пользователя'),
+        ('test_client', 'анонимного пользователя'),
     ],
     ids=['superuser', 'user', 'anonymous'],
 )
-def test_donations_cant_be_deleted(donation, client, user_role):
+def test_donations_cant_be_deleted(
+    donation,
+    client_fixture,
+    user_role,
+    request
+):
+    client = request.getfixturevalue(client_fixture)
+
     response = client.delete(
         DONATON_DETAILS_URL.format(donation_id=donation.id)
     )
+
     assert response.status_code == 404, (
         f'DELETE-запрос {user_role} к эндпоинту `{DONATON_DETAILS_URL}` '
         'должен вернуть ответ со статус-кодом 404.'
